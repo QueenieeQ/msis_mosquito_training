@@ -1,0 +1,22 @@
+# Python packages for training, comparison and the inference pipeline.
+# Install with:  ./run.sh setup     (scripts/bootstrap.sh: uv + Python 3.12 + a venv + these packages, torch wheels matched to the GPU driver)
+# or by hand:    uv pip install --python <venv>/bin/python --torch-backend auto -r config/requirements.txt
+
+# --- training (detectors + species classifier) ---
+torch>=2.5
+torchvision>=0.20
+ultralytics>=8.3
+numpy>=1.26
+pillow>=10
+pyyaml>=6
+
+# --- old-vs-new comparison and full-pipeline inference (mosquitto_msislab/infer.py) ---
+opencv-python>=4.8
+onnxruntime-gpu>=1.22,<1.24   # CUDA 12 builds (1.24+ needs CUDA 13)
+loguru>=0.7
+mmpretrain>=1.2               # loads the old SwinV2-B .pth classifiers
+mmengine>=0.10
+mmcv-lite>=2.0
+
+# --- tests ---
+pytest>=8

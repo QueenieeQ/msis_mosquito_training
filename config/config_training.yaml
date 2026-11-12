@@ -1,0 +1,111 @@
+# Single source of truth for training. Read by train_yolo.py, train_classifier.py and the other src/ modules.
+# Start everything with:  ./run.sh (menu) or scripts/run_training.sh   (one model: scripts/run_training.sh full|obb|species)
+
+paths:
+  input: input/datasets     # TRAINING DATA (edit this): <task>/{images,labels}/{train,val,test}/ + data.yaml, see docs
+  runs: outputs/runs        # relative paths are resolved against this training folder
+  yolo_datasets: outputs/datasets   # generated Ultralytics data.yaml files (pointing at `input`)
+  # only for src/import_labelstudio.py (rebuilds `input` from a Label Studio export):
+  labelstudio_export: ../../data/labelstudio_exports/consolidated_dataset
+  splits: outputs/splits
+
+run:
+  tasks: [full, obb, species]   # which models run_training.sh trains
+  parallel: true                # true: all at once (one GPU each); false: one after another
+
+telegram:
+  interval_min: 30          # periodic progress push; 0 = only start/finish/fail messages
+
+split:
+  seed: 0
+  ratios: {train: 0.70, val: 0.15, test: 0.15}
+
+# Hyper-parameter sweep for the species classifier: scripts/run_sweep.sh  (see docs/how_to_train.md)
+sweep:
+  devices: [cuda:3, cuda:4, cuda:5]   # one job at a time per GPU (~12 GB each); other users share these GPUs, check nvidia-smi first
+  epochs: 40                # shorter than species.epochs to keep the sweep cheap
+  grid:                     # every combination is trained; add more keys from the species section if wanted
+    lr_head: [3.0e-4, 1.0e-4]
+    lr_backbone: [3.0e-5, 1.0e-4, 3.0e-4]    # sweep 1: 3e-5 was best and the top of the grid, so go higher
+    weight_decay: [0.05]
+
+# New-vs-old classifier comparison, run by run_training.sh after the species task (compare_models.py)
+compare:
+  old_infer_dir: ../mosquitto_msislab   # old app pipeline (infer.py + its config/models)
+  old_cls_model: null       # null = the classifier set in the old config.yaml; or an .onnx / mmpretrain .pth path
+  split: test               # held-out images both models are scored on
+  threshold: 0.5            # decision threshold for precision / recall / F1 (AP is threshold-free)
+  device: null              # null = species.device
+
+# Task A: whole-mosquito axis-aligned boxes, 14 species classes
+full:
+  name: yolov8s_full
+  weights: weights/yolov8s.pt
+  device: 0                 # GPU index, or "0,1" for multi-GPU
+  epochs: 80
+  batch: 16
+  imgsz: 640
+  patience: 20              # early stopping on val mAP50-95
+  workers: 8
+  cache: ram                # ram | disk | false
+  fraction: 1.0             # share of the train split to use
+  train: &yolo_train        # passed straight to Ultralytics model.train()
+    optimizer: AdamW
+    lr0: 1.0e-4
+    lrf: 0.01               # final lr = lr0 * lrf = 1e-6
+    cos_lr: true
+    warmup_epochs: 5
+    weight_decay: 0.05
+    hsv_h: 0.015
+    hsv_s: 0.7
+    hsv_v: 0.4
+    scale: 0.2              # random scale 0.8-1.2
+    translate: 0.1
+    fliplr: 0.5
+    flipud: 0.5
+    degrees: 0.0
+    plots: true
+
+# Task B: oriented body boxes
+obb:
+  name: yolov8s_obb_body
+  weights: weights/yolov8s-obb.pt
+  device: 1
+  epochs: 80
+  batch: 16
+  imgsz: 640
+  patience: 20
+  workers: 8
+  cache: ram
+  fraction: 1.0
+  train: *yolo_train
+
+# Task C: Swin Transformer V2-T multi-label species classifier
+species:
+  name: swin_v2_t_species
+  data: images              # images = whole frames (letterboxed, multi-label); crops = one sample per full_body_detection box, as the infer.py pipeline feeds it
+  crop_margin: 0.05         # context around each box for data: crops
+  pretrained: true          # ImageNet-1K weights
+  device: cuda:3            # only GPUs 3,4,5 are used for training now
+  seed: 0
+  epochs: 80
+  warmup_epochs: 5
+  batch: 16                 # 4090 24GB, bf16: 11.5 GB peak; throughput is flat from 16 to 32 (compute-bound), 32 nears OOM
+  imgsz: 640
+  patience: 15              # early stopping on the focus-class val AP
+  focus: [Culex spp., Anopheles spp.]   # most important species (Culex spp. = the Culex pipiens group, there is no separate pipiens class); best.pt is chosen on their mean val AP; [] = all-class macro-AP
+  workers: 8                # CPU augmentation does ~20 img/s per worker; the 4090 trains ~76 img/s
+  lr_head: 3.0e-4           # best of the 2 sweeps (val macro-AP 0.898)
+  lr_backbone: 3.0e-4       # sweep winner; 1e-4 is nearly as good (val 0.886) and safer
+  lr_final: 1.0e-6          # head lr at the end of the cosine schedule
+  weight_decay: 0.05
+  focal_gamma: 2.0
+  class_weight_beta: 0.95   # effective-number class weighting
+  tta: true                 # also report the 4-rotation test score
+  limit: 0                  # >0 caps images per split (smoke tests)
+  augment:
+    translate: 0.1
+    scale: [0.8, 1.2]
+    brightness: 0.4
+    saturation: 0.7
+    hue: 0.015
