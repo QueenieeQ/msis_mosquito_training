@@ -2,6 +2,7 @@
 *.env
 config/telegram.env
 
+input/datasets
 # --- Generated output: trained models, logs, caches, generated yaml (can be rebuilt) ---
 outputs/
 runs/
