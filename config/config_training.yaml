@@ -85,6 +85,7 @@ species:
   name: swin_v2_t_species
   data: images              # images = whole frames (letterboxed, multi-label); crops = one sample per full_body_detection box, as the infer.py pipeline feeds it
   crop_margin: 0.05         # context around each box for data: crops
+  arch: swin_v2_t           # swin_v2_t | swin_v2_s | swin_v2_b
   pretrained: true          # ImageNet-1K weights
   device: cuda:3            # only GPUs 3,4,5 are used for training now
   seed: 0
@@ -103,9 +104,19 @@ species:
   class_weight_beta: 0.95   # effective-number class weighting
   tta: true                 # also report the 4-rotation test score
   limit: 0                  # >0 caps images per split (smoke tests)
-  augment:
-    translate: 0.1
-    scale: [0.8, 1.2]
-    brightness: 0.4
-    saturation: 0.7
-    hue: 0.015
+  augment:                  # per-sample probabilities p_* and ranges; see src/augment.py (missing keys use its defaults)
+    p_brightness: 0.55
+    p_translate: 0.55
+    p_noise: 0.45
+    p_blur: 0.35
+    p_rotate: 0.45
+    p_shear: 0.30
+    p_scale: 0.55
+    brightness: {gain_min: 0.75, gain_max: 1.25, bias_min: -18, bias_max: 18}
+    translate: {frac_x: 0.10, frac_y: 0.10}
+    rotate: {deg_min: -12, deg_max: 12}
+    scale: {min: 0.85, max: 1.20}
+    shear: {shx_min: -0.08, shx_max: 0.08, shy_min: -0.05, shy_max: 0.05}
+    noise: {sigma_min: 3.0, sigma_max: 18.0}
+    blur: {kernels: [3, 5, 7]}
+    border: reflect         # reflect | grey: what fills the corners a warp uncovers
