@@ -11,7 +11,7 @@ RUNS=outputs/runs
 OLD_DIR=${OLD_DIR:-$ROOT/../mosquitto_msislab}   # old app pipeline (compare / infer)
 OLD_CLS=("$OLD_DIR/models/mosquito_cls.onnx" "$OLD_DIR/models/new_models/Models_extracted/Models/best_accuracy_top1_epoch_96.pth"
          "$OLD_DIR/models/new_models/Models_extracted/Models/epoch_100.pth")
-DEVICE="" EPOCHS="" BATCH="" NAME="" FRACTION="" IMGSZ="" DATA="" TELEGRAM=on
+DEVICE="" EPOCHS="" BATCH="" NAME="" FRACTION="" IMGSZ="" DATA="" ARCH="" TELEGRAM=on
 B=$'\e[1m' D=$'\e[2m' R=$'\e[0m' C=$'\e[36m' G=$'\e[32m' Y=$'\e[33m' RED=$'\e[31m' INV=$'\e[7m'
 
 [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] && { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
@@ -28,8 +28,8 @@ menu() {  # menu "title" "sub" item...  -> MENU_SEL index (-1 = back / q)
   while true; do
     printf '\e[2J\e[H'
     printf "${B}${C}  Mosquito training console${R}  ${D}%s${R}\n" "$title"
-    printf "${D}  device=%s epochs=%s batch=%s name=%s data=%s imgsz=%s fraction=%s telegram=%s${R}\n" \
-      "${DEVICE:-cfg}" "${EPOCHS:-cfg}" "${BATCH:-cfg}" "${NAME:-cfg}" "${DATA:-cfg}" "${IMGSZ:-cfg}" "${FRACTION:-cfg}" "$TELEGRAM"
+    printf "${D}  device=%s epochs=%s batch=%s name=%s data=%s arch=%s imgsz=%s fraction=%s telegram=%s${R}\n" \
+      "${DEVICE:-cfg}" "${EPOCHS:-cfg}" "${BATCH:-cfg}" "${NAME:-cfg}" "${DATA:-cfg}" "${ARCH:-cfg}" "${IMGSZ:-cfg}" "${FRACTION:-cfg}" "$TELEGRAM"
     [ -n "$sub" ] && printf "  ${D}%s${R}\n" "$sub"; echo
     for ((i = 0; i < n; i++)); do
       if [ $i -eq $cur ]; then printf "  ${INV} %d) %s ${R}\n" $((i + 1)) "${items[i]}"; else printf "   %d) %s\n" $((i + 1)) "${items[i]}"; fi
@@ -61,7 +61,7 @@ common_flags() { FL=(); [ -n "$DEVICE" ] && FL+=(--device "$DEVICE"); [ -n "$EPO
 train() {  # train <task...>; classifier-only flags are added when species is among them
   common_flags
   [ -n "$FRACTION" ] && [[ " $* " != *" species "* ]] && FL+=(--fraction "$FRACTION")
-  if [[ " $* " == *" species "* ]]; then [ -n "$DATA" ] && FL+=(--data "$DATA"); [ -n "$IMGSZ" ] && FL+=(--imgsz "$IMGSZ"); fi
+  if [[ " $* " == *" species "* ]]; then [ -n "$DATA" ] && FL+=(--data "$DATA"); [ -n "$IMGSZ" ] && FL+=(--imgsz "$IMGSZ"); [ -n "$ARCH" ] && FL+=(--arch "$ARCH"); fi
   local opts=(); [ "$TELEGRAM" = off ] && opts+=(--no-telegram)
   run scripts/run_training.sh "$@" "${opts[@]}" -- "${FL[@]}"
 }
@@ -81,9 +81,9 @@ train_menu() {
 }
 
 settings_menu() {
-  local labels=(device epochs batch name fraction data imgsz) vars=(DEVICE EPOCHS BATCH NAME FRACTION DATA IMGSZ)
+  local labels=(device epochs batch name fraction data imgsz arch) vars=(DEVICE EPOCHS BATCH NAME FRACTION DATA IMGSZ ARCH)
   local hints=("GPU, e.g. cuda:3 or 0" "training epochs" "batch size" "run name (output folder under runs/)"
-               "YOLO only: share of the train set, 0-1" "classifier data: images | crops" "classifier input size, e.g. 384")
+               "YOLO only: share of the train set, 0-1" "classifier data: images | crops" "classifier input size, e.g. 384" "classifier model: swin_v2_t | swin_v2_s | swin_v2_b")
   while true; do
     local it=() i
     for i in "${!vars[@]}"; do it+=("$(printf '%-9s = %-12s %s' "${labels[i]}" "${!vars[i]:-(config)}" "(${hints[i]})")"); done
@@ -91,9 +91,9 @@ settings_menu() {
     menu "Settings" "Empty = value from config/config_training.yaml" "${it[@]}"
     local s=$MENU_SEL; [ "$s" -lt 0 ] && return
     if [ "$s" -lt ${#vars[@]} ]; then ask "${labels[s]}" "${!vars[s]}"; printf -v "${vars[s]}" '%s' "$REPLY"
-    elif [ "$s" -eq 7 ]; then [ "$TELEGRAM" = on ] && TELEGRAM=off || TELEGRAM=on
-    elif [ "$s" -eq 8 ]; then DEVICE="" EPOCHS="" BATCH="" NAME="" FRACTION="" DATA="" IMGSZ=""
-    elif [ "$s" -eq 9 ]; then "${EDITOR:-nano}" config/config_training.yaml
+    elif [ "$s" -eq 8 ]; then [ "$TELEGRAM" = on ] && TELEGRAM=off || TELEGRAM=on
+    elif [ "$s" -eq 9 ]; then DEVICE="" EPOCHS="" BATCH="" NAME="" FRACTION="" DATA="" IMGSZ="" ARCH=""
+    elif [ "$s" -eq 10 ]; then "${EDITOR:-nano}" config/config_training.yaml
     else return; fi
   done
 }
