@@ -114,12 +114,13 @@ def compare(run=None):
         a = m["classes"].get("Anopheles", {})
         rows.append(f"{name}\n    macro AP {m['macro_ap']:.3f} | F1 {m['macro_f1']:.3f} | exact {m['exact_match']:.3f}"
                     f"\n    Anopheles AP {a.get('ap', 0):.3f} F1 {a.get('f1', 0):.3f}")
-    mf = f.parent / "metrics.json"
-    if mf.exists():
+    mf, focus = f.parent / "metrics.json", d.get("focus_ap") or {}  # focus_ap: scored on the current test split
+    if not focus and mf.exists():
         r = json.loads(mf.read_text())
-        for k in ("plain", "tta4"):
-            if r.get("test_focus_ap_" + k):
-                rows.append(f"new 14-species test AP ({k}): " + ", ".join(f"{n} {v:.3f}" for n, v in r["test_focus_ap_" + k].items()))
+        focus = {k: r.get("test_focus_ap_" + k) for k in ("plain", "tta4")}
+    for k, v in focus.items():
+        if v:
+            rows.append(f"new 14-species test AP ({k}): " + ", ".join(f"{n} {x:.3f}" for n, x in v.items()))
     rows.append("(old model has no Culex spp. class, so only Anopheles is comparable)")
     return "\n".join(rows)
 

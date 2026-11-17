@@ -34,7 +34,7 @@ def split_items(split):
 def new_scores(ckpt_path, images, device):
     """{'plain' | 'tta4': [N, 4] scores} and the checkpoint, scoring with the temperature stored in best.pt."""
     ck = torch.load(ckpt_path, weights_only=True, map_location="cpu")
-    model = build_model(len(ck["classes"]), pretrained=False)
+    model = build_model(len(ck["classes"]), pretrained=False, arch=ck.get("arch", "swin_v2_t"))
     model.load_state_dict(ck["model"])
     dev = torch.device(device)
     model.to(dev)
@@ -45,6 +45,24 @@ def new_scores(ckpt_path, images, device):
     for name, tta in (("plain", False), ("tta4", True)):
         out[name] = collapse((predict(model, loader, dev, tta) / ck["temperature"]).sigmoid(), ck["classes"])
     return out, ck
+
+
+def focus_scores(ck, run, device):
+    """{plain|tta4: {focus class: AP}} of the model on the CURRENT test split of the input folder (crops or whole images)."""
+    import crop_data
+    from cls_data import load_items
+    from cls_metrics import focus_ap
+    focus = common.CFG["species"].get("focus") or []
+    data, names = (crop_data.load_items if ck.get("input") == "crop" else load_items)(ck["imgsz"])
+    imgs, y, _ = data["test"]
+    y, names = y[:, [names.index(c) for c in ck["classes"]]], list(ck["classes"])  # the checkpoint's own class order
+    model = build_model(len(ck["classes"]), pretrained=False, arch=ck.get("arch", "swin_v2_t"))
+    model.load_state_dict(ck["model"])
+    dev = torch.device(device)
+    model.to(dev)
+    loader = torch.utils.data.DataLoader(SpeciesSet(imgs, y, ck["mean"], ck["std"], False), common.CFG["species"]["batch"])
+    return {k: focus_ap((predict(model, loader, dev, tta) / ck["temperature"]).sigmoid(), y, names, focus)
+            for k, tta in (("plain", False), ("tta4", True))}
 
 
 def main():
@@ -81,7 +99,8 @@ def main():
     md = f"Split `{a.split}`, {len(items)} images, threshold {a.thr}; classes {', '.join(COARSE)}\n\n{table(rows)}\n"
     print(md)
     (run / "compare_old.md").write_text(md, encoding="utf-8")
-    (run / "compare_old.json").write_text(json.dumps({"split": a.split, "threshold": a.thr, "models": rows},
+    focus = focus_scores(ck, run, a.device) if a.split == "test" else {}
+    (run / "compare_old.json").write_text(json.dumps({"split": a.split, "threshold": a.thr, "models": rows, "focus_ap": focus},
                                                      ensure_ascii=False, indent=1))
     hist = common.RUNS / "compare_history.csv"
     new_file = not hist.exists()

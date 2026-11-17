@@ -1,4 +1,4 @@
-"""Task C: Swin Transformer V2-T (ImageNet-1K) multi-label species classifier per the guideline.
+"""Task C: Swin Transformer V2 (tiny / small / base, `arch` in the config; ImageNet-1K) multi-label species classifier per the guideline.
 
 Every setting comes from the `species` section of config/config_training.yaml; the flags below only
 override it for quick experiments. AdamW with separate backbone / head LR, linear warmup + cosine,
@@ -10,7 +10,8 @@ import argparse
 import json
 
 import torch
-from torchvision.models import Swin_V2_T_Weights, swin_v2_t
+from torchvision.models import (Swin_V2_B_Weights, Swin_V2_S_Weights, Swin_V2_T_Weights, swin_v2_b, swin_v2_s,
+                                swin_v2_t)
 
 import crop_data
 from cls_data import SpeciesSet, load_items, train_stats
@@ -18,8 +19,13 @@ from cls_metrics import class_weights, fit_temperature, focal, focus_ap, lr_at, 
 import common
 
 
-def build_model(n_classes, pretrained=True):
-    model = swin_v2_t(weights=Swin_V2_T_Weights.IMAGENET1K_V1 if pretrained else None)
+ARCHS = {"swin_v2_t": (swin_v2_t, Swin_V2_T_Weights), "swin_v2_s": (swin_v2_s, Swin_V2_S_Weights),
+         "swin_v2_b": (swin_v2_b, Swin_V2_B_Weights)}  # tiny 28M / small 50M / base 88M parameters, ImageNet-1K
+
+
+def build_model(n_classes, pretrained=True, arch="swin_v2_t"):
+    fn, weights = ARCHS[arch]
+    model = fn(weights=weights.IMAGENET1K_V1 if pretrained else None)
     model.head = torch.nn.Linear(model.head.in_features, n_classes)
     return model
 
@@ -63,7 +69,7 @@ def predict(model, loader, dev, tta=False):
     return torch.cat(outs)
 
 
-OVERRIDES = {"data": str, "imgsz": int, "epochs": int, "batch": int, "device": str, "name": str, "limit": int,
+OVERRIDES = {"arch": str, "data": str, "imgsz": int, "epochs": int, "batch": int, "device": str, "name": str, "limit": int,
              "lr_head": float, "lr_backbone": float, "weight_decay": float}
 
 
@@ -96,11 +102,11 @@ def main():
           for k, s in sets.items()}
 
     dev = torch.device(c["device"])
-    model = build_model(len(names), c["pretrained"]).to(dev)
+    model = build_model(len(names), c["pretrained"], c["arch"]).to(dev)
     opt = build_optimizer(model, c["lr_head"], c["lr_backbone"], c["weight_decay"])
     base = [g["lr"] for g in opt.param_groups]
     w = class_weights(data["train"][1], c["class_weight_beta"]).to(dev)
-    ckpt = {"arch": "swin_v2_t", "classes": names, "mean": mean, "std": std, "imgsz": c["imgsz"], "temperature": 1.0,
+    ckpt = {"arch": c["arch"], "classes": names, "mean": mean, "std": std, "imgsz": c["imgsz"], "temperature": 1.0,
             "input": "crop" if crops else "image"}
 
     focus = c.get("focus") or []

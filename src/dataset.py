@@ -7,6 +7,7 @@
     <input>/body_oriented_detection/ oriented body boxes (class x1 y1 x2 y2 x3 y3 x4 y4) -> OBB detector, same layout
 
 Change the data by adding / removing / editing files there, then train; nothing else needs rebuilding.
+A downloaded Label Studio export dropped into the folder is converted to this layout automatically (see ingest.py).
 `python src/dataset.py [full|obb|species ...]` prints a summary and fails with a readable message on any problem.
 """
 import sys
@@ -15,6 +16,7 @@ from collections import Counter
 import yaml
 
 import common
+import ingest
 
 SPLITS = ("train", "val", "test")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
@@ -27,6 +29,7 @@ class DatasetError(SystemExit):
 
 
 def task_root(task_dir):
+    ingest.ensure_ready()  # converts a freshly dropped Label Studio export first (see ingest.py)
     return common.INPUT / task_dir
 
 

@@ -4,9 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 from PIL import Image
-from torchvision.transforms import v2
 
 import dataset
+from augment import Augmenter
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -40,18 +40,11 @@ def load_items(size):
     return out, names
 
 
-DEFAULT_AUG = {"translate": 0.1, "scale": [0.8, 1.2], "brightness": 0.4, "saturation": 0.7, "hue": 0.015}
-
-
 class Aug:
-    """Guideline augmentation: rot90 k, flips p=.5, random scale / translate, mild HSV jitter."""
+    """Training augmentation: rot90 k and flips p=.5, then the onsite-studio recipe (augment.py), then normalise."""
 
     def __init__(self, mean, std, cfg=None):
-        c = {**DEFAULT_AUG, **(cfg or {})}
-        self.t = v2.Compose([
-            v2.RandomAffine(degrees=0, translate=(c["translate"], c["translate"]), scale=tuple(c["scale"]), fill=114),
-            v2.ColorJitter(brightness=c["brightness"], saturation=c["saturation"], hue=c["hue"]),
-        ])
+        self.t = Augmenter(cfg)
         self.mean, self.std = mean, std
 
     def __call__(self, x):
@@ -60,7 +53,8 @@ class Aug:
             x = x.flip(2)
         if torch.rand(()) < 0.5:
             x = x.flip(1)
-        return (self.t(x).float() / 255 - self.mean) / self.std
+        x = torch.from_numpy(self.t(np.ascontiguousarray(x.permute(1, 2, 0).numpy()))).permute(2, 0, 1)
+        return (x.float() / 255 - self.mean) / self.std
 
 
 class SpeciesSet(torch.utils.data.Dataset):

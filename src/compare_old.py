@@ -52,8 +52,8 @@ def _scores(results, images, classes):
 
 
 def run_old(images, infer_dir, cls_model=None, device=None, cache_dir=None, classes=COARSE):
-    infer_dir = Path(infer_dir)
-    cls_path = Path(cls_model) if cls_model else infer_dir / "models" / yaml.safe_load(
+    infer_dir = Path(infer_dir).resolve()
+    cls_path = (Path(cls_model).resolve() if Path(cls_model).exists() else Path(cls_model)) if cls_model else infer_dir / "models" / yaml.safe_load(
         (infer_dir / "config" / "config.yaml").read_text(encoding="utf-8"))["cls_model"]["Current"]
     cache = Path(cache_dir) / f"old_{_key(images, cls_path, infer_dir)}.json" if cache_dir else None
     if cache and cache.exists():
