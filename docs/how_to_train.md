@@ -50,6 +50,10 @@ input/datasets/
 - Images can be symlinks. Train, val and test must each contain images.
 - `./run.sh` -> Dataset (or `python src/dataset.py`) prints the images and boxes per split and class and stops with a message on
   errors (wrong class id, wrong number of values in a label line, an empty split, a missing `data.yaml`).
+- **New Label Studio export:** copy the downloaded export (the `consolidated_dataset` folder, or the folder containing it) into
+  `input/datasets/` and start training. `src/ingest.py` sees it, makes the 70/15/15 photo-grouped split, writes the layout above
+  and trains on it. The old task folders go to `input/datasets/_previous/<timestamp>/`; the same export is converted only once
+  (`_imported.json`), so later edits to the converted files are kept until a different export is dropped in.
 - `python src/import_labelstudio.py` rebuilds this folder from the Label Studio export (`paths.labelstudio_export`) with the
   70/15/15 photo-grouped split (`split` in the config); it refuses to overwrite existing data unless `--force`.
 - Species classifier: the class list and the box labels of `full_body_detection` are its only source. The whole-image mode
