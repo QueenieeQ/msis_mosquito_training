@@ -116,3 +116,10 @@ def test_crop_dataset_one_sample_per_box_and_cache_follows_data(yolo_input):
     lab.write_text("0 0.3 0.3 0.2 0.2\n1 0.7 0.7 0.2 0.2\n")  # a second box in one image
     data, _ = crop_data.load_items(32)
     assert data["train"][0].shape[0] == 9 and len(list((common.RUNS / "crop_cache").glob("*.pt"))) == 3
+
+
+@pytest.mark.parametrize("arch,params", [("swin_v2_t", 28e6), ("swin_v2_s", 50e6), ("swin_v2_b", 88e6)])
+def test_arch_option_builds_each_swin_v2_size(arch, params):
+    model = tc.build_model(5, pretrained=False, arch=arch)
+    n = sum(p.numel() for p in model.parameters())
+    assert model.head.out_features == 5 and abs(n - params) / params < 0.1

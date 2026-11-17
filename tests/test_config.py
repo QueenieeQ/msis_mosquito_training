@@ -10,7 +10,7 @@ import train_yolo
 YOLO_KEYS = {"name", "weights", "device", "epochs", "batch", "imgsz", "patience", "workers", "cache", "fraction", "train"}
 SPECIES_KEYS = {"name", "pretrained", "device", "seed", "epochs", "warmup_epochs", "batch", "imgsz", "patience",
                 "workers", "lr_head", "lr_backbone", "lr_final", "weight_decay", "focal_gamma", "class_weight_beta",
-                "tta", "limit", "augment", "focus", "data", "crop_margin"}
+                "tta", "limit", "augment", "focus", "data", "crop_margin", "arch"}
 
 
 def test_config_file_location_and_sections():
@@ -53,7 +53,8 @@ def test_species_section_is_complete_and_numeric():
     for k in ("lr_head", "lr_backbone", "lr_final", "weight_decay", "focal_gamma", "class_weight_beta"):
         assert isinstance(c[k], float), k
     assert c["lr_final"] < c["lr_backbone"] <= c["lr_head"]
-    assert len(c["augment"]["scale"]) == 2
+    assert c["augment"]["scale"]["min"] < c["augment"]["scale"]["max"]
+    assert 0 <= c["augment"]["p_rotate"] <= 1 and c["augment"]["border"] in ("reflect", "grey")
 
 
 def test_cli_overrides_only_replace_given_values():
